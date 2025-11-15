@@ -90,4 +90,15 @@ public class AnnotationScanner {
     public Map<String, Class<?>> getWebhooks() {
         return webhooks;
     }
+
+    public void logResults() {
+        System.out.println("=== Annotation Scanner Results ===");
+
+        System.out.println("Payment Methods found: " + paymentMethods.keySet());
+        System.out.println("AntiFraud Rules found: " + antiFraudRules.keySet());
+        System.out.println("Webhooks found: " + webhooks.keySet());
+
+        System.out.println("=== End of Annotation Scan ===");
+    }
+
 }
