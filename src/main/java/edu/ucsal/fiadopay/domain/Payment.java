@@ -8,10 +8,10 @@ import java.time.Instant;
 @Entity
 @Data @NoArgsConstructor @AllArgsConstructor @Builder
 @Table(
-    indexes = { @Index(columnList="merchantId"), @Index(columnList="status") },
-    uniqueConstraints = {
-        @UniqueConstraint(name = "uk_payment_merchant_idempotency", columnNames = {"merchantId", "idempotencyKey"})
-    }
+        indexes = { @Index(columnList="merchantId"), @Index(columnList="status") },
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_payment_merchant_idempotency", columnNames = {"merchantId", "idempotencyKey"})
+        }
 )
 public class Payment {
     @Id
@@ -32,7 +32,6 @@ public class Payment {
     @Column(nullable = false)
     private Integer installments; // 1..12
 
-    // Mantido como Double por simplicidade no simulador
     private Double monthlyInterest; // 1.0 (=1%/mês)
 
     @Column(nullable = false, precision = 19, scale = 2)
@@ -44,13 +43,19 @@ public class Payment {
 
     @Column(nullable = false)
     private Instant createdAt;
+
     @Column(nullable = false)
     private Instant updatedAt;
 
     @Column(length = 64)
     private String idempotencyKey;
+
     @Column(length = 255)
     private String metadataOrderId;
+
+    // 🔥 Adicionado para funcionar com o WebhookDispatcher
+    @Column(length = 500)
+    private String webhookUrl;
 
     public enum Status { PENDING, APPROVED, DECLINED, EXPIRED, REFUNDED }
 }

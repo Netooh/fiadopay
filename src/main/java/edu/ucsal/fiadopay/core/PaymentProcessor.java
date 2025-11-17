@@ -1,29 +1,31 @@
 package edu.ucsal.fiadopay.core;
 
-import edu.ucsal.fiadopay.annotations.AntiFraud;
+import edu.ucsal.fiadopay.domain.Payment;
+import edu.ucsal.fiadopay.repo.PaymentRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Map;
-import java.util.Optional;
 
 @Component
 public class PaymentProcessor {
 
     private final AsyncExecutor asyncExecutor;
     private final AnnotationScanner annotationScanner;
-    private final PaymentRepository paymentRepository;
+    private final PaymentRepository payments;
     private final WebhookDispatcher webhookDispatcher;
 
     public PaymentProcessor(AsyncExecutor asyncExecutor,
                             AnnotationScanner annotationScanner,
-                            PaymentRepository paymentRepository,
+                            PaymentRepository payments,
                             WebhookDispatcher webhookDispatcher) {
+
         this.asyncExecutor = asyncExecutor;
         this.annotationScanner = annotationScanner;
-        this.paymentRepository = paymentRepository;
+        this.payments = payments;
         this.webhookDispatcher = webhookDispatcher;
     }
 
@@ -40,102 +42,78 @@ public class PaymentProcessor {
 
     @Transactional
     public void process(String paymentId) {
-        Optional<Payment> opt = paymentRepository.findById(paymentId);
-        if (!opt.isPresent()) {
+        var opt = payments.findById(paymentId);
+        if (opt.isEmpty()) {
             System.err.println("Payment not found: " + paymentId);
             return;
         }
 
-        Payment payment = opt.get();
+        Payment p = opt.get();
 
-        double amount = toDouble(payment.getAmount());
-        int installments = payment.getInstallments();
+        double amount = p.getAmount().doubleValue();
+        int installments = p.getInstallments() == null ? 1 : p.getInstallments();
 
-        Map<String, Class<?>> antiFraudRules = annotationScanner.getAntiFraudRules();
-        for (Map.Entry<String, Class<?>> entry : antiFraudRules.entrySet()) {
-            Class<?> ruleClass = entry.getValue();
+        Map<String, Class<?>> rules = annotationScanner.getAntiFraudRules();
+
+        for (Map.Entry<String, Class<?>> entry : rules.entrySet()) {
+            Class<?> clazz = entry.getValue();
             try {
-                Object ruleInstance = ruleClass.getDeclaredConstructor().newInstance();
-                boolean ok = invokeValidate(ruleInstance, amount);
+                Object instance = clazz.getDeclaredConstructor().newInstance();
+                boolean ok = invokeValidate(instance, amount);
+
                 if (!ok) {
-                    System.out.println("AntiFraud rule '" + entry.getKey() + "' failed for payment " + paymentId);
-                    setPaymentStatus(payment, PaymentStatus.DECLINED);
-                    paymentRepository.save(payment);
-                    webhookDispatcher.enqueuePaymentEvent(payment);
+                    System.out.println("[ANTI-FRAUD] Rule FAILED → " + entry.getKey());
+
+                    p.setStatus(Payment.Status.DECLINED);
+                    p.setUpdatedAt(java.time.Instant.now());
+                    payments.save(p);
+
+                    webhookDispatcher.enqueuePaymentEvent(p);
                     return;
                 }
-            } catch (NoSuchMethodException nsme) {
-                System.out.println("AntiFraud rule " + entry.getKey() + " has no validate(...) method — skipping.");
+
             } catch (Exception e) {
                 System.err.println("Error executing antifraud rule " + entry.getKey() + ": " + e.getMessage());
             }
         }
 
-        BigDecimal totalWithInterest = calculateTotalWithInterest(payment.getAmount(), payment.getMonthlyInterest(), installments);
-        payment.setTotalWithInterest(totalWithInterest);
+        BigDecimal newTotal = calculateTotalWithInterest(
+                p.getAmount(),
+                p.getMonthlyInterest(),
+                installments
+        );
 
-        setPaymentStatus(payment, PaymentStatus.APPROVED);
+        p.setTotalWithInterest(newTotal);
+        p.setStatus(Payment.Status.APPROVED);
+        p.setUpdatedAt(java.time.Instant.now());
 
-        paymentRepository.save(payment);
+        payments.save(p);
 
-        webhookDispatcher.enqueuePaymentEvent(payment);
+        webhookDispatcher.enqueuePaymentEvent(p);
 
-        System.out.println("Payment " + paymentId + " processed successfully (approved).");
+        System.out.println("[PROCESSOR] Payment " + paymentId + " approved.");
     }
 
-    private boolean invokeValidate(Object ruleInstance, double amount) throws Exception {
-        Class<?> cls = ruleInstance.getClass();
+    private boolean invokeValidate(Object rule, double amount) throws Exception {
+        Class<?> c = rule.getClass();
         try {
-            Method m = cls.getMethod("validate", double.class);
-            Object r = m.invoke(ruleInstance, amount);
-            if (r instanceof Boolean) return (Boolean) r;
+            Method m = c.getMethod("validate", double.class);
+            return (Boolean) m.invoke(rule, amount);
         } catch (NoSuchMethodException e) {
-            try {
-                Method m = cls.getMethod("validate", BigDecimal.class);
-                Object r = m.invoke(ruleInstance, BigDecimal.valueOf(amount));
-                if (r instanceof Boolean) return (Boolean) r;
-            } catch (NoSuchMethodException ex) {
-                // no validate found
-                throw ex;
-            }
+            Method m = c.getMethod("validate", BigDecimal.class);
+            return (Boolean) m.invoke(rule, BigDecimal.valueOf(amount));
         }
-        return true;
     }
 
-    private BigDecimal calculateTotalWithInterest(BigDecimal baseAmount, Double monthlyInterestPct, int installments) {
-        if (baseAmount == null) return BigDecimal.ZERO;
-        if (installments <= 1 || monthlyInterestPct == null || monthlyInterestPct <= 0.0) {
-            return baseAmount;
+    private BigDecimal calculateTotalWithInterest(BigDecimal base, Double monthlyInterest, int installments) {
+        if (installments <= 1 || monthlyInterest == null || monthlyInterest <= 0) {
+            return base.setScale(2, RoundingMode.HALF_UP);
         }
 
-        double r = monthlyInterestPct / 100.0;
-        double factor = Math.pow(1.0 + r, installments);
-        BigDecimal total = baseAmount.multiply(BigDecimal.valueOf(factor));
-        return total.setScale(2, BigDecimal.ROUND_HALF_UP);
-    }
+        double r = monthlyInterest / 100.0;
+        double factor = Math.pow(1 + r, installments);
 
-    private double toDouble(BigDecimal v) {
-        if (v == null) return 0.0;
-        return v.doubleValue();
-    }
-
-    private void setPaymentStatus(Payment payment, PaymentStatus status) {
-        payment.setStatus(status);
-    }
-
-    public static class Payment {
-        public BigDecimal getAmount() { return BigDecimal.ZERO; }
-        public int getInstallments() { return 1; }
-        public Double getMonthlyInterest() { return 0.0; }
-        public void setTotalWithInterest(BigDecimal v) {}
-        public void setStatus(PaymentStatus s) {}
-    }
-    public enum PaymentStatus { APPROVED, DECLINED, PENDING }
-    public interface PaymentRepository {
-        Optional<Payment> findById(String id);
-        Payment save(Payment payment);
-    }
-    public interface WebhookDispatcher {
-        void enqueuePaymentEvent(Payment payment);
+        return base.multiply(BigDecimal.valueOf(factor))
+                .setScale(2, RoundingMode.HALF_UP);
     }
 }

@@ -1,24 +1,35 @@
 package edu.ucsal.fiadopay.domain;
 
-import jakarta.persistence.*;
-import lombok.*;
 import java.time.Instant;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+
+import java.time.Instant;
+import java.util.UUID;
+
 @Entity
-@Data @NoArgsConstructor @AllArgsConstructor @Builder
 public class WebhookDelivery {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
 
-    private String eventId;     // evt_xxx
-    private String eventType;   // payment.updated
+    @Id
+    private String id = UUID.randomUUID().toString();
+
     private String paymentId;
-    private String targetUrl;   // merchant webhook
-    private String signature;   // HMAC
-    private int attempts;
-    private boolean delivered;
-    private Instant lastAttemptAt;
+    private boolean success;
+    private String errorMessage;
+    private Instant at;
 
-    @Lob
-    private String payload;
+    public String getId() { return id; }
+
+    public String getPaymentId() { return paymentId; }
+    public void setPaymentId(String paymentId) { this.paymentId = paymentId; }
+
+    public boolean isSuccess() { return success; }
+    public void setSuccess(boolean success) { this.success = success; }
+
+    public String getErrorMessage() { return errorMessage; }
+    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+
+    public Instant getAt() { return at; }
+    public void setAt(Instant at) { this.at = at; }
 }

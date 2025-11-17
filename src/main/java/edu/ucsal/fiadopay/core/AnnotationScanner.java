@@ -1,29 +1,19 @@
 package edu.ucsal.fiadopay.core;
 import edu.ucsal.fiadopay.annotations.*;
+import org.springframework.stereotype.Component;
+
 import java.io.File;
 import java.net.URL;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * AnnotationScanner
- *
- * A simple reflection-based scanner that searches for classes annotated
- * with domain annotations (@PaymentMethod, @AntiFraud, @WebhookSink),
- * and registers them for later use by the system.
- */
-
-
+@Component
 public class AnnotationScanner {
 
     private final Map<String, Class<?>> paymentMethods = new ConcurrentHashMap<>();
     private final Map<String, Class<?>> antiFraudRules = new ConcurrentHashMap<>();
     private final Map<String, Class<?>> webhooks = new ConcurrentHashMap<>();
 
-    /**
-     * Scans the project's classpath looking for annotated classes
-     * inside a given base package.
-     */
     public void scan(String basePackage) {
         try {
             String path = basePackage.replace('.', '/');
