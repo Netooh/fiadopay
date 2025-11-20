@@ -32,6 +32,7 @@ public class PaymentProcessor {
     public void submit(String paymentId) {
         asyncExecutor.enqueue(() -> {
             try {
+                Thread.sleep(2000);
                 process(paymentId);
             } catch (Exception e) {
                 System.err.println("Error processing payment " + paymentId + ": " + e.getMessage());
@@ -53,7 +54,7 @@ public class PaymentProcessor {
         double amount = p.getAmount().doubleValue();
         int installments = p.getInstallments() == null ? 1 : p.getInstallments();
 
-        Map<String, Class<?>> rules = annotationScanner.getAntiFraudRules();
+        Map<String, Class<?>> rules = annotationScanner.getAntiFraund();
 
         for (Map.Entry<String, Class<?>> entry : rules.entrySet()) {
             Class<?> clazz = entry.getValue();

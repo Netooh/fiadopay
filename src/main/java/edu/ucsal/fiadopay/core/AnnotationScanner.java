@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AnnotationScanner {
 
     private final Map<String, Class<?>> paymentMethods = new ConcurrentHashMap<>();
-    private final Map<String, Class<?>> antiFraudRules = new ConcurrentHashMap<>();
+    private final Map<String, Class<?>> AntiFraund = new ConcurrentHashMap<>();
     private final Map<String, Class<?>> webhooks = new ConcurrentHashMap<>();
 
     public void scan(String basePackage) {
@@ -59,7 +59,7 @@ public class AnnotationScanner {
 
         if (clazz.isAnnotationPresent(AntiFraud.class)) {
             AntiFraud annotation = clazz.getAnnotation(AntiFraud.class);
-            antiFraudRules.put(annotation.name(), clazz);
+            AntiFraund.put(annotation.name(), clazz);
         }
 
         if (clazz.isAnnotationPresent(WebhookSink.class)) {
@@ -73,8 +73,8 @@ public class AnnotationScanner {
         return paymentMethods;
     }
 
-    public Map<String, Class<?>> getAntiFraudRules() {
-        return antiFraudRules;
+    public Map<String, Class<?>> getAntiFraund() {
+        return AntiFraund;
     }
 
     public Map<String, Class<?>> getWebhooks() {
@@ -85,7 +85,7 @@ public class AnnotationScanner {
         System.out.println("=== Annotation Scanner Results ===");
 
         System.out.println("Payment Methods found: " + paymentMethods.keySet());
-        System.out.println("AntiFraud Rules found: " + antiFraudRules.keySet());
+        System.out.println("AntiFraud Rules found: " + AntiFraund.keySet());
         System.out.println("Webhooks found: " + webhooks.keySet());
 
         System.out.println("=== End of Annotation Scan ===");
